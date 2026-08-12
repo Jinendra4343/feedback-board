@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import db from '../db.js';
 import { requireAuth } from '../auth.js';
+import { createBoardSchema, commentSchema, statusSchema, validate } from '../validation.js';
 
 const router = Router();
 const uploadDir = process.env.UPLOAD_DIR || path.resolve('uploads');
@@ -16,7 +17,10 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  },
 });
 
 const publicBoard = (board) => ({
@@ -31,7 +35,7 @@ router.get('/', requireAuth, (req, res) => {
   res.json(rows.map(publicBoard));
 });
 
-router.post('/', requireAuth, upload.single('image'), (req, res) => {
+router.post('/', requireAuth, upload.single('image'), validate(createBoardSchema), (req, res) => {
   if (req.user.role !== 'designer') return res.status(403).json({ error: 'Only designers can create boards' });
   if (!req.file) return res.status(400).json({ error: 'An image is required' });
 
@@ -62,14 +66,12 @@ router.get('/:id/comments', requireAuth, (req, res) => {
   res.json(rows);
 });
 
-router.post('/:id/comments', requireAuth, (req, res) => {
+router.post('/:id/comments', requireAuth, validate(commentSchema), (req, res) => {
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(req.params.id);
   if (!board) return res.status(404).json({ error: 'Board not found' });
   if (!canView(req.user, board)) return res.status(403).json({ error: 'Not allowed' });
 
-  const { text, x, y } = req.body || {};
-  if (!text || x == null || y == null) return res.status(400).json({ error: 'text, x and y are required' });
-
+  const { text, x, y } = req.body;
   const info = db
     .prepare('INSERT INTO comments (board_id, user_id, text, x, y) VALUES (?, ?, ?, ?, ?)')
     .run(board.id, req.user.id, String(text), Number(x), Number(y));
@@ -81,14 +83,12 @@ router.post('/:id/comments', requireAuth, (req, res) => {
   res.status(201).json(comment);
 });
 
-router.patch('/:id/status', requireAuth, (req, res) => {
+router.patch('/:id/status', requireAuth, validate(statusSchema), (req, res) => {
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(req.params.id);
   if (!board) return res.status(404).json({ error: 'Board not found' });
   if (req.user.role !== 'designer') return res.status(403).json({ error: 'Only designers can change status' });
 
-  const { status } = req.body || {};
-  if (!['pending', 'in_review', 'approved'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
-
+  const { status } = req.body;
   db.prepare('UPDATE boards SET status = ? WHERE id = ?').run(status, board.id);
   req.app.get('io').to(`board:${board.id}`).emit('status:change', { boardId: board.id, status });
   res.json({ id: board.id, status });

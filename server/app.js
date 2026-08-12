@@ -3,6 +3,9 @@ import http from 'node:http';
 import path from 'node:path';
 import cors from 'cors';
 import { Server } from 'socket.io';
+import { MulterError } from 'multer';
+import { pino } from 'pino';
+import { pinoHttp } from 'pino-http';
 import db from './db.js';
 import { verifyToken } from './auth.js';
 import authRoutes from './routes/auth.js';
@@ -10,7 +13,10 @@ import boardRoutes from './routes/boards.js';
 
 export function createApp() {
   const app = express();
+  const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
   app.use(cors());
+  app.use(pinoHttp({ logger }));
   app.use(express.json());
   app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || 'uploads')));
 
@@ -44,5 +50,16 @@ export function createApp() {
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
-  return { app, server, io };
+  app.use((err, req, res, _next) => {
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON body' });
+    if (err instanceof MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Image too large (max 10MB)' });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'Only image files are allowed') return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'unhandled error');
+    return res.status(500).json({ error: 'Internal server error' });
+  });
+
+  return { app, server, io, logger };
 }

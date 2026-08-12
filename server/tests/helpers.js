@@ -9,6 +9,7 @@ export async function startTestServer() {
   process.env.DB_PATH = path.join(tmpDir, 'test.db');
   process.env.UPLOAD_DIR = path.join(tmpDir, 'uploads');
   process.env.JWT_SECRET = 'test-secret';
+  process.env.LOG_LEVEL = 'silent';
 
   const { createApp } = await import('../app.js');
   const { app, server, io } = createApp();
