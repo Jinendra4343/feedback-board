@@ -1,0 +1,19 @@
+services:
+  server:
+    build: ./server
+    ports:
+      - "4000:4000"
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      - JWT_SECRET=change-me-in-production
+
+  client:
+    build: ./client
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+volumes:
+  uploads:

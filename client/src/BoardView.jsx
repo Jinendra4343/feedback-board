@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSocket } from './socket.js';
+import { api } from './api.js';
 import { STATUS_ORDER, STATUS_LABEL } from './Dashboard.jsx';
 
 export default function BoardView({ user, token, board, onBack }) {
@@ -13,7 +14,7 @@ export default function BoardView({ user, token, board, onBack }) {
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/boards/${board.id}/comments`, {
+    api(`/api/boards/${board.id}/comments`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -47,7 +48,7 @@ export default function BoardView({ user, token, board, onBack }) {
     if (!draftText.trim()) return;
     setError('');
     try {
-      const res = await fetch(`/api/boards/${board.id}/comments`, {
+      const res = await api(`/api/boards/${board.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: draftText.trim(), x: draft.x, y: draft.y }),
@@ -65,7 +66,7 @@ export default function BoardView({ user, token, board, onBack }) {
   const changeStatus = async (next) => {
     setError('');
     try {
-      const res = await fetch(`/api/boards/${board.id}/status`, {
+      const res = await api(`/api/boards/${board.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: next }),

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: feedback-board-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /opt/render/project/src/uploads

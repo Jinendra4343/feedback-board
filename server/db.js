@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 
-const db = new DatabaseSync('feedback.db');
+const DB_PATH = process.env.DB_PATH || 'feedback.db';
+const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -46,3 +47,4 @@ db.exec(`
 `);
 
 export default db;
+

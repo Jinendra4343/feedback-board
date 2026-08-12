@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from './api.js';
 
 export default function AuthPage({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -14,7 +15,7 @@ export default function AuthPage({ onAuth }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`/api/auth/${mode}`, {
+      const res = await api(`/api/auth/${mode}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role }),
@@ -35,7 +36,7 @@ export default function AuthPage({ onAuth }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await api('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: demoEmail, password: 'password123' }),

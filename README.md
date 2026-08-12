@@ -51,6 +51,35 @@ npm install
 npm run dev
 ```
 
+### With Docker
+
+```bash
+docker compose up --build
+# web app: http://localhost:8080  ·  API: http://localhost:4000
+```
+
+### Tests
+
+```bash
+cd server
+npm test        # 25 tests: auth, role permissions, boards, comments, WebSocket delivery
+```
+
+### CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the server test suite and builds the
+client on every push to `main`.
+
+[![CI](https://github.com/Jinendra4343/feedback-board/actions/workflows/ci.yml/badge.svg)](https://github.com/Jinendra4343/feedback-board/actions/workflows/ci.yml)
+
+### Deployment
+
+- **Server** — Render: the included `render.yaml` provisions the API service
+  (blueprint deploy). Set `VITE_API_URL` on the client to the Render URL.
+- **Client** — Vercel: `client/vercel.json` is ready for a framework-preset deploy
+  with `VITE_API_URL` pointing at the API service (required for production; the
+  local Vite proxy is dev-only).
+
 Open **http://localhost:5173** in two different browsers (or one normal +
 one incognito window) and log in with the demo accounts to see real-time sync:
 
@@ -84,6 +113,11 @@ The client drops a pin → it appears on the designer's screen instantly.
 - REST for mutations + WS for fan-out keeps the real-time code minimal and idempotent:
   the HTTP response already contains the full comment object, so clients can
   optimistic-update from their own POST result and dedupe on `id`.
+- The server is split into `app.js` (app factory) + `index.js` (entry), so the
+  whole stack — HTTP and WebSocket — spins up on an ephemeral port in tests.
+- `VITE_API_URL` env var points the client at a hosted API in production;
+  in development it's empty and the Vite proxy forwards `/api`, `/uploads` and
+  `/socket.io` to the local server.
 
 ## Roadmap / next steps
 

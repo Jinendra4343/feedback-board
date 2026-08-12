@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from './socket.js';
+import { api } from './api.js';
 
 const STATUS_ORDER = ['pending', 'in_review', 'approved'];
 const STATUS_LABEL = { pending: 'Pending', in_review: 'In review', approved: 'Approved' };
@@ -16,7 +17,7 @@ export default function Dashboard({ user, token, onOpenBoard, onLogout }) {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/boards', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api('/api/boards', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load boards');
       setBoards(data);
@@ -48,7 +49,7 @@ export default function Dashboard({ user, token, onOpenBoard, onLogout }) {
     form.append('image', image);
     if (clientEmail) form.append('clientEmail', clientEmail);
     try {
-      const res = await fetch('/api/boards', {
+      const res = await api('/api/boards', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: form,

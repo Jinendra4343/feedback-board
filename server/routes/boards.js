@@ -6,7 +6,7 @@ import db from '../db.js';
 import { requireAuth } from '../auth.js';
 
 const router = Router();
-const uploadDir = path.resolve('uploads');
+const uploadDir = process.env.UPLOAD_DIR || path.resolve('uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
