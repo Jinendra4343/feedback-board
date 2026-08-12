@@ -17,7 +17,7 @@ before(async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Other Client', email: 'other@test.com', password: 'password123' }),
   });
-  ({ token: otherClientToken } = await res.json());
+  ({ accessToken: otherClientToken } = await res.json());
 });
 
 after(() => ctx.close());

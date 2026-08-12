@@ -38,6 +38,18 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_comments_board ON comments(board_id);
 
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    token_hash   TEXT NOT NULL UNIQUE,
+    expires_at   TEXT NOT NULL,
+    revoked_at   TEXT,
+    replaced_by  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
+
   CREATE TABLE IF NOT EXISTS activity (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     board_id   INTEGER NOT NULL REFERENCES boards(id),

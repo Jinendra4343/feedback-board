@@ -3,21 +3,19 @@ import AuthPage from './AuthPage.jsx';
 import Dashboard from './Dashboard.jsx';
 import BoardView from './BoardView.jsx';
 import { connectSocket, disconnectSocket } from './socket.js';
-
-const TOKEN_KEY = 'fb_token';
-const USER_KEY = 'fb_user';
+import { getAccessToken, getCurrentUser, saveSession, clearSession, subscribe } from './auth.js';
+import { api } from './api.js';
 
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(USER_KEY));
-    } catch {
-      return null;
-    }
-  });
+  const [token, setToken] = useState(getAccessToken);
+  const [user, setUser] = useState(getCurrentUser);
   const [currentBoard, setCurrentBoard] = useState(null);
   const [toasts, setToasts] = useState([]);
+
+  useEffect(() => subscribe((state) => {
+    setToken(state?.token ?? null);
+    setUser(state?.user ?? null);
+  }), []);
 
   useEffect(() => {
     const onToast = (e) => {
@@ -40,17 +38,18 @@ export default function App() {
   }, [token]);
 
   const handleAuth = (data) => {
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    setToken(data.token);
+    saveSession(data);
+    setToken(data.accessToken);
     setUser(data.user);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: localStorage.getItem('fb_refresh') }) });
+    } catch {
+      // best-effort revocation; session clears regardless
+    }
+    clearSession();
     setCurrentBoard(null);
   };
 

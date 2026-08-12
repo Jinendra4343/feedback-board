@@ -62,7 +62,7 @@ docker compose up --build
 
 ```bash
 cd server
-npm test        # 25 tests: auth, role permissions, boards, comments, WebSocket delivery
+npm test        # 48 tests: auth + token rotation, role permissions, boards, comments, WebSocket delivery
 ```
 
 ### CI
@@ -95,7 +95,9 @@ The client drops a pin → it appears on the designer's screen instantly.
 | Method | Endpoint                     | Description                        |
 | ------ | ---------------------------- | ---------------------------------- |
 | POST   | `/api/auth/register`         | Create account (`role` client/designer) |
-| POST   | `/api/auth/login`            | Returns JWT                        |
+| POST   | `/api/auth/login`            | Returns `accessToken` (15m) + rotating `refreshToken` (30d) |
+| POST   | `/api/auth/refresh`          | Rotate refresh token → new pair; reuse detection revokes all sessions |
+| POST   | `/api/auth/logout`           | Revoke the refresh token        |
 | GET    | `/api/boards`                | List boards (role-scoped)          |
 | POST   | `/api/boards`                | Create board (image upload, designer only) |
 | GET    | `/api/boards/:id/comments`   | List comments with author          |

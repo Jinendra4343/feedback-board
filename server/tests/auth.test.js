@@ -18,8 +18,57 @@ test('register: creates a client account and returns a token', async () => {
   });
   const data = await res.json();
   assert.equal(res.status, 201);
-  assert.ok(data.token);
+  assert.ok(data.accessToken);
+  assert.ok(data.refreshToken);
   assert.equal(data.user.role, 'client');
+});
+
+test('auth: refresh rotates tokens, old refresh token stops working', async () => {
+  const { refreshToken: first } = await login(ctx.base, 'designer@demo.com');
+  const res = await fetch(`${ctx.base}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: first }),
+  });
+  const data = await res.json();
+  assert.equal(res.status, 200);
+  assert.ok(data.accessToken);
+  assert.notEqual(data.refreshToken, first);
+
+  const reuse = await fetch(`${ctx.base}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: first }),
+  });
+  assert.equal(reuse.status, 401);
+  assert.equal((await reuse.json()).code, 'REUSED');
+});
+
+test('auth: refresh rejects garbage tokens', async () => {
+  const res = await fetch(`${ctx.base}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: 'bogus' }),
+  });
+  assert.equal(res.status, 403);
+});
+
+test('auth: logout revokes the refresh token', async () => {
+  const { refreshToken } = await login(ctx.base, 'designer@demo.com');
+  const out = await fetch(`${ctx.base}/api/auth/logout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+  assert.equal(out.status, 204);
+
+  const res = await fetch(`${ctx.base}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+  assert.equal(res.status, 401);
+  assert.equal((await res.json()).code, 'REUSED');
 });
 
 test('register: rejects duplicate emails', async () => {

@@ -37,7 +37,7 @@ export async function login(base, email, password = 'password123') {
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  return { token: data.token, user: data.user, res };
+  return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, res };
 }
 
 export function auth(token) {

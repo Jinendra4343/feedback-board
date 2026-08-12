@@ -2,6 +2,8 @@ import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
 import cors from 'cors';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { Server } from 'socket.io';
 import { MulterError } from 'multer';
 import { pino } from 'pino';
@@ -15,10 +17,18 @@ export function createApp() {
   const app = express();
   const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
+  app.use(helmet());
   app.use(cors());
   app.use(pinoHttp({ logger }));
   app.use(express.json());
   app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || 'uploads')));
+
+  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+
+  const refreshLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false });
+  app.use('/api/auth/refresh', refreshLimiter);
 
   const server = http.createServer(app);
   const io = new Server(server, { cors: { origin: '*' } });
