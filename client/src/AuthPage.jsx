@@ -54,8 +54,11 @@ export default function AuthPage({ onAuth }) {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <h1 className="logo">Feedback<span>Board</span></h1>
-        <p className="tagline">Client feedback on design work — in real time.</p>
+        <h1 className="logo">
+          <span className="mark" aria-hidden="true" />
+          Feedback<span>Board</span>
+        </h1>
+        <p className="tagline">Pin feedback straight on the design — and watch it land live.</p>
 
         <div className="tabs">
           <button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }}>Log in</button>

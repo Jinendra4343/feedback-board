@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSocket } from './socket.js';
 import { api } from './api.js';
+import { toast } from './toast.js';
 import { STATUS_ORDER, STATUS_LABEL } from './Dashboard.jsx';
 
 export default function BoardView({ user, token, board, onBack }) {
-  const [comments, setComments] = useState([]);
+  const [comments, setComments] = useState(null);
   const [status, setStatus] = useState(board.status);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState(null);
   const [draftText, setDraftText] = useState('');
-  const [imageSize, setImageSize] = useState({ w: 1, h: 1 });
+  const [latestId, setLatestId] = useState(null);
   const imgRef = useRef(null);
 
   useEffect(() => {
@@ -18,17 +19,26 @@ export default function BoardView({ user, token, board, onBack }) {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((data) => alive && setComments(data))
+      .then((data) => {
+        if (!alive) return;
+        setComments(data);
+        setLatestId(data.length ? data[data.length - 1].id : null);
+      })
       .catch((err) => alive && setError(err.message));
 
     const socket = getSocket();
     if (!socket) return () => { alive = false; };
 
     socket.on('comment:new', ({ boardId, comment }) => {
-      if (boardId === board.id) setComments((prev) => [...prev, comment]);
+      if (boardId !== board.id) return;
+      setComments((prev) => (prev ? [...prev, comment] : [comment]));
+      setLatestId(comment.id);
     });
     socket.on('status:change', ({ boardId, status: s }) => {
-      if (boardId === board.id) setStatus(s);
+      if (boardId === board.id) {
+        setStatus(s);
+        toast(`Board moved to ${STATUS_LABEL[s]}`, 'success');
+      }
     });
 
     return () => {
@@ -39,6 +49,7 @@ export default function BoardView({ user, token, board, onBack }) {
   }, [board.id, token]);
 
   const handleImageClick = (e) => {
+    if (e.target.closest('.pin')) return;
     const rect = imgRef.current.getBoundingClientRect();
     setDraft({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
     setDraftText('');
@@ -54,12 +65,15 @@ export default function BoardView({ user, token, board, onBack }) {
         body: JSON.stringify({ text: draftText.trim(), x: draft.x, y: draft.y }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add comment');
-      setComments((prev) => [...prev, data]);
+      if (!res.ok) throw new Error(data.error || 'Failed to add feedback');
+      setComments((prev) => [...(prev || []), data]);
+      setLatestId(data.id);
       setDraft(null);
       setDraftText('');
+      toast('Feedback pinned', 'success');
     } catch (err) {
       setError(err.message);
+      toast(err.message, 'error');
     }
   };
 
@@ -74,12 +88,15 @@ export default function BoardView({ user, token, board, onBack }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update status');
       setStatus(data.status);
+      toast(`Board moved to ${STATUS_LABEL[data.status]}`, 'success');
     } catch (err) {
       setError(err.message);
+      toast(err.message, 'error');
     }
   };
 
-  const nextStatus = STATUS_ORDER[(STATUS_ORDER.indexOf(status) + 1) % STATUS_ORDER.length];
+  const stepIndex = STATUS_ORDER.indexOf(status);
+  const isDesigner = user.role === 'designer';
 
   return (
     <div className="app">
@@ -87,11 +104,21 @@ export default function BoardView({ user, token, board, onBack }) {
         <button className="ghost" onClick={onBack}>← Boards</button>
         <h1 className="page-title">{board.title}</h1>
         <div className="topbar-right">
-          <span className={`badge ${status}`}>{STATUS_LABEL[status]}</span>
-          {user.role === 'designer' && (
-            <button className="primary small" onClick={() => changeStatus(nextStatus)}>
-              Move to {STATUS_LABEL[nextStatus]} →
-            </button>
+          {isDesigner ? (
+            <div className="stepper" role="group" aria-label="Board status">
+              {STATUS_ORDER.map((s, i) => (
+                <button
+                  key={s}
+                  className={`step ${i === stepIndex ? 'current' : ''} ${i < stepIndex ? 'passed' : ''}`}
+                  onClick={() => changeStatus(s)}
+                  aria-current={i === stepIndex ? 'step' : undefined}
+                >
+                  {STATUS_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className={`badge ${status}`}>{STATUS_LABEL[status]}</span>
           )}
         </div>
       </header>
@@ -100,56 +127,69 @@ export default function BoardView({ user, token, board, onBack }) {
 
       <div className="board-layout">
         <div className="canvas-wrap">
-          <div className="canvas" style={{ aspectRatio: `${imageSize.w} / ${imageSize.h}` }}>
+          <div className="canvas">
             <img
               ref={imgRef}
               src={board.image_url}
-              alt={board.title}
+              alt={`Design under review: ${board.title}`}
               onClick={handleImageClick}
-              onLoad={(e) => {
-                const img = e.target;
-                setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
-              }}
+              draggable={false}
             />
-            {comments.map((c) => (
-              <div
-                key={c.id}
-                className={`pin ${c.user_id === user.id ? 'mine' : ''}`}
-                style={{ left: `${c.x}%`, top: `${c.y}%` }}
-                title={`${c.name}: ${c.text}`}
-              >
-                {c.text.slice(0, 1).toUpperCase()}
-                <span className="pin-label">{c.name}</span>
-              </div>
-            ))}
+            <span className="zoom-hint">Click design to pin</span>
+            {comments &&
+              comments.map((c, i) => (
+                <div
+                  key={c.id}
+                  className={`pin ${c.user_id === user.id ? 'mine' : ''} ${c.id === latestId ? 'new' : ''}`}
+                  style={{ left: `${c.x}%`, top: `${c.y}%` }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {i + 1}
+                  <span className="pin-label">{c.name}</span>
+                </div>
+              ))}
             {draft && (
-              <div className="pin draft" style={{ left: `${draft.x}%`, top: `${draft.y}%` }}>
+              <div className="pin draft" style={{ left: `${draft.x}%`, top: `${draft.y}%` }} aria-hidden="true">
                 ?
               </div>
             )}
           </div>
-          <p className="muted hint">Click anywhere on the design to drop a feedback pin.</p>
+          <p className="hint">Click anywhere on the design to drop a numbered feedback pin — everyone sees it live.</p>
         </div>
 
         <aside className="comments-panel">
-          <h2>Feedback ({comments.length})</h2>
+          <h2>
+            Feedback
+            <span className="count">{comments ? comments.length : '…'}</span>
+          </h2>
           <div className="comment-list">
-            {comments.length === 0 && <p className="muted">No feedback yet. Click the design to add the first pin.</p>}
-            {comments.map((c) => (
-              <div key={c.id} className={`comment ${c.user_id === user.id ? 'mine' : ''}`}>
-                <div className="comment-head">
-                  <strong>{c.name}</strong>
-                  <span className={`badge tiny ${c.role}`}>{c.role}</span>
+            {comments === null &&
+              [0, 1, 2].map((i) => (
+                <div className="skeleton line" key={i} style={{ height: 54 }} />
+              ))}
+            {comments !== null && comments.length === 0 && (
+              <p className="muted small">
+                No feedback yet. Click the design on the left to drop the first pin.
+              </p>
+            )}
+            {comments &&
+              comments.map((c, i) => (
+                <div key={c.id} className={`comment ${c.user_id === user.id ? 'mine' : ''}`} style={{ '--i': i }}>
+                  <div className="comment-head">
+                    <strong>{c.name}</strong>
+                    <span className={`badge tiny ${c.role}`}>{c.role}</span>
+                  </div>
+                  <p>{c.text}</p>
+                  <span className="meta">at ({c.x.toFixed(1)}%, {c.y.toFixed(1)}%)</span>
                 </div>
-                <p>{c.text}</p>
-                <span className="muted small">at ({c.x.toFixed(1)}%, {c.y.toFixed(1)}%)</span>
-              </div>
-            ))}
+              ))}
           </div>
 
           {draft && (
             <div className="draft-box">
-              <p className="muted small">Dropping pin at ({draft.x.toFixed(1)}%, {draft.y.toFixed(1)}%)</p>
+              <p className="muted small" style={{ marginBottom: 4 }}>
+                Pinning at ({draft.x.toFixed(1)}%, {draft.y.toFixed(1)}%)
+              </p>
               <textarea
                 placeholder="Write your feedback…"
                 value={draftText}
@@ -158,7 +198,7 @@ export default function BoardView({ user, token, board, onBack }) {
               />
               <div className="modal-actions">
                 <button className="ghost small" onClick={() => setDraft(null)}>Cancel</button>
-                <button className="primary small" onClick={submitDraft}>Add feedback</button>
+                <button className="primary small" onClick={submitDraft}>Pin feedback</button>
               </div>
             </div>
           )}
