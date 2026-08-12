@@ -37,6 +37,20 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_comments_board ON comments(board_id);
+
+  CREATE TABLE IF NOT EXISTS activity (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id   INTEGER NOT NULL REFERENCES boards(id),
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    action     TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_boards_client ON boards(client_id);
+  CREATE INDEX IF NOT EXISTS idx_boards_designer ON boards(designer_id);
+  CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id);
+  CREATE INDEX IF NOT EXISTS idx_activity_board ON activity(board_id, id);
+  CREATE INDEX IF NOT EXISTS idx_comments_board_id ON comments(board_id, id);
 `);
 
 const hashed = bcrypt.hashSync('password123', 10);

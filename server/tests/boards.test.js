@@ -64,7 +64,7 @@ test('boards: clients only see boards shared with them', async () => {
   const otherBoards = await otherRes.json();
 
   assert.ok(designerBoards.length >= 3, 'designer sees all boards');
-  assert.deepEqual(clientBoards.map((b) => b.title), ['Homepage mockup', 'Board for Demo Client']);
+  assert.deepEqual(clientBoards.map((b) => b.title), ['Board for Demo Client', 'Homepage mockup']);
   assert.deepEqual(otherBoards.map((b) => b.title), ['Board for Other']);
   assert.ok(!clientBoards.some((b) => b.title === 'Board for Other'), 'client never sees other clients\' boards');
 });

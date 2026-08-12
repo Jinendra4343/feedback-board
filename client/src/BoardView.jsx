@@ -6,6 +6,8 @@ import { STATUS_ORDER, STATUS_LABEL } from './Dashboard.jsx';
 
 export default function BoardView({ user, token, board, onBack }) {
   const [comments, setComments] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [status, setStatus] = useState(board.status);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState(null);
@@ -13,18 +15,28 @@ export default function BoardView({ user, token, board, onBack }) {
   const [latestId, setLatestId] = useState(null);
   const imgRef = useRef(null);
 
+  const loadActivity = () => {
+    api(`/api/boards/${board.id}/activity`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setActivity(data))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     let alive = true;
-    api(`/api/boards/${board.id}/comments`, {
+    api(`/api/boards/${board.id}/comments?limit=50`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((data) => {
         if (!alive) return;
-        setComments(data);
-        setLatestId(data.length ? data[data.length - 1].id : null);
+        setComments(data.items || data);
+        setNextCursor(data.nextCursor ?? null);
+        setLatestId((data.items || data).length ? (data.items || data)[(data.items || data).length - 1].id : null);
       })
       .catch((err) => alive && setError(err.message));
+
+    loadActivity();
 
     const socket = getSocket();
     if (!socket) return () => { alive = false; };
@@ -37,6 +49,7 @@ export default function BoardView({ user, token, board, onBack }) {
     socket.on('status:change', ({ boardId, status: s }) => {
       if (boardId === board.id) {
         setStatus(s);
+        loadActivity();
         toast(`Board moved to ${STATUS_LABEL[s]}`, 'success');
       }
     });
@@ -47,6 +60,19 @@ export default function BoardView({ user, token, board, onBack }) {
       socket.off('status:change');
     };
   }, [board.id, token]);
+
+  const loadMore = async () => {
+    try {
+      const res = await api(`/api/boards/${board.id}/comments?limit=50&cursor=${nextCursor}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setComments((prev) => [...(prev || []), ...(data.items || [])]);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
 
   const handleImageClick = (e) => {
     if (e.target.closest('.pin')) return;
@@ -183,7 +209,23 @@ export default function BoardView({ user, token, board, onBack }) {
                   <span className="meta">at ({c.x.toFixed(1)}%, {c.y.toFixed(1)}%)</span>
                 </div>
               ))}
+            {nextCursor && (
+              <button className="ghost small" style={{ margin: '0 auto', display: 'block' }} onClick={loadMore}>
+                Load more feedback
+              </button>
+            )}
           </div>
+
+          {activity.length > 0 && (
+            <div className="activity">
+              <h3>Recent activity</h3>
+              {activity.map((a) => (
+                <p key={a.id} className="small">
+                  <strong>{a.name}</strong> {a.action.replace('status:', 'moved status to ')}
+                </p>
+              ))}
+            </div>
+          )}
 
           {draft && (
             <div className="draft-box">

@@ -28,11 +28,34 @@ const publicBoard = (board) => ({
   image_url: `/uploads/${path.basename(board.image_url)}`,
 });
 
+function parsePagination(query) {
+  const limit = Number.parseInt(query.limit, 10);
+  const cursor = Number.parseInt(query.cursor, 10);
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : null;
+  const safeCursor = Number.isInteger(cursor) && cursor > 0 ? cursor : null;
+  return { limit: safeLimit, cursor: safeCursor };
+}
+
 router.get('/', requireAuth, (req, res) => {
-  const rows = req.user.role === 'designer'
-    ? db.prepare('SELECT * FROM boards ORDER BY created_at DESC').all()
-    : db.prepare('SELECT * FROM boards WHERE client_id = ? ORDER BY created_at DESC').all(req.user.id);
-  res.json(rows.map(publicBoard));
+  const { limit, cursor } = parsePagination(req.query);
+  const isDesigner = req.user.role === 'designer';
+
+  if (limit === null) {
+    const rows = isDesigner
+      ? db.prepare('SELECT * FROM boards ORDER BY id DESC').all()
+      : db.prepare('SELECT * FROM boards WHERE client_id = ? ORDER BY id DESC').all(req.user.id);
+    return res.json(rows.map(publicBoard));
+  }
+
+  const rows = isDesigner
+    ? db.prepare('SELECT * FROM boards WHERE (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?')
+        .all(cursor, cursor, limit + 1)
+    : db.prepare('SELECT * FROM boards WHERE client_id = ? AND (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?')
+        .all(req.user.id, cursor, cursor, limit + 1);
+
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  res.json({ items: items.map(publicBoard), nextCursor: hasMore ? items[items.length - 1].id : null });
 });
 
 router.post('/', requireAuth, upload.single('image'), validate(createBoardSchema), (req, res) => {
@@ -59,11 +82,23 @@ router.get('/:id/comments', requireAuth, (req, res) => {
   if (!board) return res.status(404).json({ error: 'Board not found' });
   if (!canView(req.user, board)) return res.status(403).json({ error: 'Not allowed' });
 
+  const { limit, cursor } = parsePagination(req.query);
+  if (limit === null) {
+    const rows = db
+      .prepare(`SELECT c.*, u.name, u.role FROM comments c JOIN users u ON u.id = c.user_id
+                WHERE c.board_id = ? ORDER BY c.id ASC`)
+      .all(board.id);
+    return res.json(rows);
+  }
+
   const rows = db
     .prepare(`SELECT c.*, u.name, u.role FROM comments c JOIN users u ON u.id = c.user_id
-              WHERE c.board_id = ? ORDER BY c.created_at ASC, c.id ASC`)
-    .all(req.params.id);
-  res.json(rows);
+              WHERE c.board_id = ? AND (? IS NULL OR c.id > ?) ORDER BY c.id ASC LIMIT ?`)
+    .all(board.id, cursor, cursor, limit + 1);
+
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  res.json({ items, nextCursor: hasMore ? items[items.length - 1].id : null });
 });
 
 router.post('/:id/comments', requireAuth, validate(commentSchema), (req, res) => {
@@ -89,9 +124,34 @@ router.patch('/:id/status', requireAuth, validate(statusSchema), (req, res) => {
   if (req.user.role !== 'designer') return res.status(403).json({ error: 'Only designers can change status' });
 
   const { status } = req.body;
-  db.prepare('UPDATE boards SET status = ? WHERE id = ?').run(status, board.id);
+
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE boards SET status = ? WHERE id = ?').run(status, board.id);
+    db.prepare('INSERT INTO activity (board_id, user_id, action) VALUES (?, ?, ?)')
+      .run(board.id, req.user.id, `status:${status}`);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    req.log.error({ err }, 'status update failed');
+    return res.status(500).json({ error: 'Failed to update status' });
+  }
+
   req.app.get('io').to(`board:${board.id}`).emit('status:change', { boardId: board.id, status });
   res.json({ id: board.id, status });
+});
+
+router.get('/:id/activity', requireAuth, (req, res) => {
+  const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(req.params.id);
+  if (!board) return res.status(404).json({ error: 'Board not found' });
+  if (!canView(req.user, board)) return res.status(403).json({ error: 'Not allowed' });
+
+  const rows = db
+    .prepare(`SELECT a.id, a.action, a.created_at, u.name, u.role
+              FROM activity a JOIN users u ON u.id = a.user_id
+              WHERE a.board_id = ? ORDER BY a.id DESC LIMIT 50`)
+    .all(board.id);
+  res.json(rows);
 });
 
 function canView(user, board) {

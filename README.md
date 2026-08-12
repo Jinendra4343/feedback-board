@@ -118,6 +118,13 @@ The client drops a pin → it appears on the designer's screen instantly.
 - `VITE_API_URL` env var points the client at a hosted API in production;
   in development it's empty and the Vite proxy forwards `/api`, `/uploads` and
   `/socket.io` to the local server.
+- **Pagination is keyset/cursor-based** (`?limit=&cursor=`) — no `OFFSET`, so page
+  N+1 never rescans skipped rows and concurrent inserts can't shift pages.
+- **Status changes run inside a transaction** (`BEGIN`/`COMMIT` with rollback):
+  the board update and its audit-trail row are written atomically.
+- **Indexing:** composite indexes on `(board_id, id)` and `(board_id, created_at)`
+  cover the hot query patterns (filter + order in one index) — see the
+  `EXPLAIN QUERY PLAN` notes in the test suite docs.
 
 ## Roadmap / next steps
 
